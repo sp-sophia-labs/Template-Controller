@@ -1,0 +1,8 @@
+<library path="fsm_impedance_controller">
+  <class name="fsm_impedance_controller/FSMImpedanceController" type="fsm_ic::FSMImpedanceController" base_class_type="controller_interface::ControllerInterface">
+  <description>
+    The Finite State Machine-Impedance Controller executes joint-space trajectories on a set of joints
+    using impedance control with varying parameters based on predefined finite states
+  </description>
+  </class>
+</library>
