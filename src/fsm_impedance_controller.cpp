@@ -1,20 +1,11 @@
 #include "fsm_impedance_controller/fsm_impedance_controller.hpp"
 #include <fsm_impedance_controller/robot_state.hpp>
 
-#include <cmath>
-#include <memory>
-
 #include <controller_interface/controller_interface.hpp>
 
-#include "rclcpp/rclcpp.hpp"
-#include "rclcpp/node.hpp"
-#include <franka/robot_state.h>
-
-#define IDENTITY Eigen::MatrixXd::Identity(6,6)
 
 namespace fsm_ic
 {
-
   controller_interface::InterfaceConfiguration FSMImpedanceController::command_interface_configuration() const
   {
     controller_interface::InterfaceConfiguration command_interfaces_config;
@@ -26,20 +17,29 @@ namespace fsm_ic
     return state_interfaces_config;
   }   
 
+
   CallbackReturn FSMImpedanceController::on_init()
   {
     return CallbackReturn::SUCCESS;
   }
-
-  void FSMImpedanceController::starting(const rclcpp::Time& /*time*/) 
-  {
-
-  }
-
-
   controller_interface::return_type FSMImpedanceController::update(const rclcpp::Time & time, const rclcpp::Duration & period)
   {
     return controller_interface::return_type::OK;
+  }
+
+  CallbackReturn FSMImpedanceController::on_configure(const rclcpp_lifecycle::State& /*previous_state*/)
+  {
+    return CallbackReturn::SUCCESS;
+  }
+
+  CallbackReturn FSMImpedanceController::on_activate(const rclcpp_lifecycle::State& /*previous_state*/) 
+  {
+    return CallbackReturn::SUCCESS;
+  }
+
+  controller_interface::CallbackReturn FSMImpedanceController::on_deactivate(const rclcpp_lifecycle::State& /*previous_state*/)
+  {
+    return CallbackReturn::SUCCESS;
   }
 
 }
