@@ -46,12 +46,10 @@ declare all parameters defining their default values.
 #include "franka_semantic_components/franka_robot_model.hpp"
 #include "franka_semantic_components/franka_robot_state.hpp"
 #include "franka_semantic_components/franka_cartesian_pose_interface.hpp"
-
+#include <franka_msgs/msg/franka_robot_state.hpp>
 #include <franka/robot_state.h>
 
 #include "fsm_impedance_controller/visibility_control.h"
-
-#define IDENTITY Eigen::MatrixXd::Identity(6,6) 
 
 namespace fsm_ic
 {
@@ -63,23 +61,32 @@ class FSMImpedanceController : public controller_interface::ControllerInterface
     controller_interface::InterfaceConfiguration command_interface_configuration() const override;
     controller_interface::InterfaceConfiguration state_interface_configuration() const override;
 
-    CallbackReturn on_init() override;
+    // The Needs thing to be implemented for ros2_control interface
     controller_interface::return_type update(const rclcpp::Time & time, const rclcpp::Duration & period) override;
 
+    // The following is all ROS2's lifecycle related stuff
+    CallbackReturn on_init() override;
     CallbackReturn on_configure(const rclcpp_lifecycle::State& previous_state) override;
     CallbackReturn on_activate(const rclcpp_lifecycle::State& previous_state) override;
     CallbackReturn on_deactivate(const rclcpp_lifecycle::State& previous_state) override;
 
+
     private:
-
-    std::unique_ptr<franka_semantic_components::FrankaCartesianPoseInterface> franka_cartesian_pose_;
-    std::string arm_id_;
     std::unique_ptr<franka_semantic_components::FrankaRobotModel> franka_robot_model_;
-
-    int num_joints_{7};
+    std::unique_ptr<franka_semantic_components::FrankaRobotState> franka_robot_state_;
+    std::unique_ptr<franka_semantic_components::FrankaCartesianPoseInterface> franka_cartesian_pose_;
+    
+    franka_msgs::msg::FrankaRobotState robot_state_, init_robot_state_;
 
     const std::string k_robot_state_interface_name{"robot_state"};
     const std::string k_robot_model_interface_name{"robot_model"};
+
+    std::string robot_description_;
+    std::string robot_name_;
+
+    // std::string arm_id_;
+    std::string arm_id_{"panda"};
+    int num_joints{7};
 };
 
 }
