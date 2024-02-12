@@ -1,17 +1,5 @@
 #include "fsm_impedance_controller/fsm_impedance_controller.hpp"
 
-namespace {
-  template <class T, size_t N>
-  std::ostream& operator<<(std::ostream& ostream, const std::array<T, N>& array) {
-  ostream << "[";
-  std::copy(array.cbegin(), array.cend() - 1, std::ostream_iterator<T>(ostream, ","));
-  std::copy(array.cend() - 1, array.cend(), std::ostream_iterator<T>(ostream));
-  ostream << "]";
-  return ostream;
-  }
-}  // anonymous namespace
-
-
 namespace fsm_ic
 {
   controller_interface::InterfaceConfiguration FSMImpedanceController::command_interface_configuration() const
