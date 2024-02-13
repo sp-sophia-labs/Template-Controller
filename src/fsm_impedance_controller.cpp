@@ -2,6 +2,31 @@
 
 namespace fsm_ic
 {
+  namespace {
+    template <class T, size_t N>
+    std::ostream& operator<<(std::ostream& ostream, const std::array<T, N>& array) {
+        //ostream << "[";
+        std::copy(array.cbegin(), array.cend() - 1, std::ostream_iterator<T>(ostream, ","));
+        std::copy(array.cend() - 1, array.cend(), std::ostream_iterator<T>(ostream));
+        //ostream << "]";
+        return ostream;
+    }
+  }  // anonymous namespace
+
+  inline void pseudoInverse(const Eigen::MatrixXd& M_, Eigen::MatrixXd& M_pinv_, bool damped = true) {
+    double lambda_ = damped ? 0.2 : 0.0;
+
+    Eigen::JacobiSVD<Eigen::MatrixXd> svd(M_, Eigen::ComputeFullU | Eigen::ComputeFullV);
+    Eigen::JacobiSVD<Eigen::MatrixXd>::SingularValuesType sing_vals_ = svd.singularValues();
+    Eigen::MatrixXd S_ = M_;  // copying the dimensions of M_, its content is not needed.
+    S_.setZero();
+
+    for (int i = 0; i < sing_vals_.size(); i++)
+        S_(i, i) = (sing_vals_(i)) / (sing_vals_(i) * sing_vals_(i) + lambda_ * lambda_);
+
+    M_pinv_ = Eigen::MatrixXd(svd.matrixV() * S_.transpose() * svd.matrixU().transpose());
+  }
+
   controller_interface::InterfaceConfiguration FSMImpedanceController::command_interface_configuration() const
   {
     controller_interface::InterfaceConfiguration config;
@@ -34,6 +59,13 @@ namespace fsm_ic
 
   CallbackReturn FSMImpedanceController::on_init()
   {
+    std::vector<double> cartesian_stiffness_vector;
+    std::vector<double> cartesian_damping_vector;
+
+    position_d_.setZero();
+    orientation_d_.coeffs() << 0.0, 0.0, 0.0, 1.0;
+    position_d_target_.setZero();
+    orientation_d_target_.coeffs() << 0.0, 0.0, 0.0, 1.0;
     return CallbackReturn::SUCCESS;
   }
 

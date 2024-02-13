@@ -113,7 +113,6 @@ class FSMImpedanceController : public controller_interface::ControllerInterface
     Eigen::Matrix<double, 6,6> cartesian_inertia_target_; //impedance damping term
 
     bool config_control = true; //sets if we want to control the configuration of the robot in nullspace
-    // end FLAGS
     double filter_params_{0.005};
     double nullspace_stiffness_{40};
     double nullspace_stiffness_target_{40.0};
@@ -125,9 +124,7 @@ class FSMImpedanceController : public controller_interface::ControllerInterface
     Eigen::Vector3d position_d_target_;
     Eigen::Quaterniond orientation_d_target_;
     double count = 0; //logging
-
     double dt = 0.001;
-
     //repulsion sphere test;
     double R;
     Eigen::Vector3d C;
