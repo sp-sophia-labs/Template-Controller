@@ -80,6 +80,7 @@ class FSMImpedanceController : public controller_interface::ControllerInterface
     std::unique_ptr<franka_semantic_components::FrankaRobotModel> franka_robot_model_;
     std::unique_ptr<franka_semantic_components::FrankaRobotState> franka_robot_state_;
     std::unique_ptr<franka_semantic_components::FrankaCartesianPoseInterface> franka_cartesian_pose_;
+    std::vector<hardware_interface::CommandInterface> joint_handles_;
     
     franka_msgs::msg::FrankaRobotState robot_state_, init_robot_state_;
 
@@ -101,10 +102,10 @@ class FSMImpedanceController : public controller_interface::ControllerInterface
     std::array<double, 16> EE_T_K; //stiffness frame in EE frame
     Eigen::Affine3d pose_desired;
     Eigen::Matrix<double, 6, 1> error; //pose error (6d)
-    Eigen::Matrix<double, 6, 6>  F_contact_des = Eigen::MatrixXd::Zero(6,6); //desired contact force
-    Eigen::Matrix<double, 6, 6>  F_ext = Eigen::MatrixXd::Zero(6,6); //external forces
-    Eigen::Matrix<double, 6, 6>  F_cmd = Eigen::MatrixXd::Zero(6,6); //commanded contact force
-    Eigen::Matrix<double, 6, 6>  I_F_error = Eigen::MatrixXd::Zero(6,6); //force error integral
+    Eigen::Matrix<double, 6, 1>  F_contact_des = Eigen::MatrixXd::Zero(6,1); //desired contact force
+    Eigen::Matrix<double, 6, 1>  F_ext = Eigen::MatrixXd::Zero(6,1); //external forces
+    Eigen::Matrix<double, 6, 1>  F_cmd = Eigen::MatrixXd::Zero(6,1); //commanded contact force
+    Eigen::Matrix<double, 6, 1>  I_F_error = Eigen::MatrixXd::Zero(6,1); //force error integral
     Eigen::Matrix<double, 6,6> T = IDENTITY; // impedance inertia term
     Eigen::Matrix<double, 6,6> K = IDENTITY; //impedance stiffness term
     Eigen::Matrix<double, 6,6> D = IDENTITY; //impedance damping term
