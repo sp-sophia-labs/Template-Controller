@@ -58,14 +58,10 @@ namespace fsm_ic
     // Define state interfaces
     controller_interface::InterfaceConfiguration config;
     config.type = controller_interface::interface_configuration_type::INDIVIDUAL;
-
-    // Creates state interface for everything published in robot state (joint, position, velocity)
-    for (const auto& franka_robot_state_name : franka_robot_state_->get_state_interface_names()) {
-      config.names.push_back(franka_robot_state_name);
-    }
-    // Create state interface to read robot model for computations involving robot dynamics
-    for (const auto& franka_robot_model_name : franka_robot_model_->get_state_interface_names()) {
-      config.names.push_back(franka_robot_model_name);
+    for (int i = 1; i <= num_joints; i++) {
+      config.names.push_back(arm_id_ + "_joint" + std::to_string(i) + "/effort");
+      config.names.push_back(arm_id_ + "_joint" + std::to_string(i) + "/position");
+      config.names.push_back(arm_id_ + "_joint" + std::to_string(i) + "/velocity");
     }
     return config;
   }
