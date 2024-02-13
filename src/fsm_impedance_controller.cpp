@@ -95,6 +95,46 @@ namespace fsm_ic
     init_robot_state_ = franka_msgs::msg::FrankaRobotState();
     franka_robot_state_->get_values_as_message(init_robot_state_);
 
+    // std::array<double, 42> jacobian_array =
+    //     franka_robot_model_->getZeroJacobian(franka::Frame::kEndEffector);
+
+    Eigen::Map<Eigen::Matrix<double, 7, 1>> q_initial(init_robot_state_.measured_joint_state.position.data());
+
+    Eigen::Vector3d position(
+    init_robot_state_.o_t_ee.pose.position.x,
+    init_robot_state_.o_t_ee.pose.position.y,
+    init_robot_state_.o_t_ee.pose.position.z);
+    Eigen::Quaterniond orientation(
+    init_robot_state_.o_t_ee.pose.orientation.w,
+    init_robot_state_.o_t_ee.pose.orientation.x,
+    init_robot_state_.o_t_ee.pose.orientation.y,
+    init_robot_state_.o_t_ee.pose.orientation.z);
+    Eigen::Affine3d initial_transform = Eigen::Affine3d::Identity();
+    initial_transform.translation() = position;
+    initial_transform.rotate(orientation.toRotationMatrix());
+
+    position_d_ = initial_transform.translation();
+    orientation_d_ = initial_transform.rotation();
+    position_d_target_ = initial_transform.translation();
+    orientation_d_target_ = initial_transform.rotation();
+
+    auto F_T_EE = init_robot_state_.f_t_ee;
+    auto EE_T_K = init_robot_state_.ee_t_k;
+
+    auto q_d_nullspace_ = q_initial;
+    nullspace_stiffness_target_ = 30;
+
+    K.topLeftCorner(3, 3) = 200 * Eigen::Matrix3d::Identity();
+    K.bottomRightCorner(3, 3) << 90, 0, 0, 0, 90, 0, 0, 0, 80;
+    D.topLeftCorner(3, 3) = 35 * Eigen::Matrix3d::Identity();
+    D.bottomRightCorner(3, 3) << 15, 0, 0, 0, 15, 0, 0, 0, 12;
+    cartesian_stiffness_target_ = K;
+    cartesian_damping_target_ = D;
+
+    R = 0.00001; C << 0.0, 0, 0.0;
+    repulsion_K.setZero(); repulsion_D.setZero();
+    repulsion_K = Eigen::Matrix3d::Identity(); repulsion_D = Eigen::Matrix3d::Identity();
+
     return CallbackReturn::SUCCESS;
   }
 
