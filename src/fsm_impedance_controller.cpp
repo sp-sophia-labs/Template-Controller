@@ -34,6 +34,13 @@ namespace fsm_ic
 
   CallbackReturn FSMImpedanceController::on_init()
   {
+    position_d_.setZero();
+    orientation_d_.coeffs() << 0.0, 0.0, 0.0, 1.0;
+    position_d_target_.setZero();
+    orientation_d_target_.coeffs() << 0.0, 0.0, 0.0, 1.0;
+
+    cartesian_stiffness_.setZero();
+    cartesian_damping_.setZero();
     return CallbackReturn::SUCCESS;
   }
 

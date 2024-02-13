@@ -58,8 +58,8 @@ class FSMImpedanceController : public controller_interface::ControllerInterface
     public:
     using CallbackReturn = rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn;
     
-    controller_interface::InterfaceConfiguration command_interface_configuration() const override;
-    controller_interface::InterfaceConfiguration state_interface_configuration() const override;
+    [[nodiscard]] controller_interface::InterfaceConfiguration command_interface_configuration() const override;
+    [[nodiscard]] controller_interface::InterfaceConfiguration state_interface_configuration() const override;
 
     // The Needs thing to be implemented for ros2_control interface
     controller_interface::return_type update(const rclcpp::Time & time, const rclcpp::Duration & period) override;
@@ -70,8 +70,15 @@ class FSMImpedanceController : public controller_interface::ControllerInterface
     CallbackReturn on_activate(const rclcpp_lifecycle::State& previous_state) override;
     CallbackReturn on_deactivate(const rclcpp_lifecycle::State& previous_state) override;
 
+    using vector7d = Eigen::Matrix<double, 7, 1>;
+
 
     private:
+    void UpdateJointStates();
+    Eigen::Matrix<double, 7, 1> saturateTorqueRate(
+    const Eigen::Matrix<double, 7, 1>& tau_d_calculated,
+    const Eigen::Matrix<double, 7, 1>& tau_J_d);
+
     std::unique_ptr<franka_semantic_components::FrankaRobotModel> franka_robot_model_;
     std::unique_ptr<franka_semantic_components::FrankaRobotState> franka_robot_state_;
     std::unique_ptr<franka_semantic_components::FrankaCartesianPoseInterface> franka_cartesian_pose_;
@@ -81,12 +88,25 @@ class FSMImpedanceController : public controller_interface::ControllerInterface
     const std::string k_robot_state_interface_name{"robot_state"};
     const std::string k_robot_model_interface_name{"robot_model"};
 
-    std::string robot_description_;
-    std::string robot_name_;
-
     // std::string arm_id_;
     std::string arm_id_{"panda"};
     int num_joints{7};
+
+    const double delta_tau_max_{1.0};
+    double nullspace_stiffness_{20.0};
+    double nullspace_stiffness_target_{20.0};
+
+    bool k_elbow_activated{true};
+    Eigen::Matrix<double, 6, 6> cartesian_stiffness_;
+    Eigen::Matrix<double, 6, 6> cartesian_stiffness_target_;
+    Eigen::Matrix<double, 6, 6> cartesian_damping_;
+    Eigen::Matrix<double, 6, 6> cartesian_damping_target_;
+    Eigen::Matrix<double, 7, 1> q_d_nullspace_;
+    Eigen::Vector3d position_d_;
+    Eigen::Quaterniond orientation_d_;
+    Eigen::Vector3d position_d_target_;
+    Eigen::Quaterniond orientation_d_target_;
+
 };
 
 }
