@@ -87,7 +87,8 @@ class FSMImpedanceController : public controller_interface::ControllerInterface
     const std::string k_robot_state_interface_name{"robot_state"};
     const std::string k_robot_model_interface_name{"robot_model"};
 
-    std::string arm_id_{"panda"};
+    // std::string arm_id_;
+    std::string arm_id_{"fr3"};
     int num_joints{7};
 
     // Saturation

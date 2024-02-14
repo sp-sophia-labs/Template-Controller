@@ -56,14 +56,20 @@ namespace fsm_ic
   controller_interface::InterfaceConfiguration FSMImpedanceController::state_interface_configuration()const
   {
     // Define state interfaces
-    controller_interface::InterfaceConfiguration config;
-    config.type = controller_interface::interface_configuration_type::INDIVIDUAL;
-    for (int i = 1; i <= num_joints; i++) {
-      config.names.push_back(arm_id_ + "_joint" + std::to_string(i) + "/effort");
-      config.names.push_back(arm_id_ + "_joint" + std::to_string(i) + "/position");
-      config.names.push_back(arm_id_ + "_joint" + std::to_string(i) + "/velocity");
+    controller_interface::InterfaceConfiguration state_interfaces_config;
+    state_interfaces_config.type = controller_interface::interface_configuration_type::INDIVIDUAL;
+    // for (int i = 1; i <= num_joints; i++) {
+    //   config.names.push_back(arm_id_ + "_joint" + std::to_string(i) + "/effort");
+    //   config.names.push_back(arm_id_ + "_joint" + std::to_string(i) + "/position");
+    //   config.names.push_back(arm_id_ + "_joint" + std::to_string(i) + "/velocity");
+    // }
+    for (const auto& franka_robot_model_name : franka_robot_model_->get_state_interface_names()) {
+      state_interfaces_config.names.push_back(franka_robot_model_name);
     }
-    return config;
+    for (const auto& franka_robot_state_name : franka_robot_state_->get_state_interface_names()) {
+      state_interfaces_config.names.push_back(franka_robot_state_name);
+    }
+    return state_interfaces_config;
   }
 
 
@@ -179,7 +185,6 @@ namespace fsm_ic
 
   CallbackReturn FSMImpedanceController::on_configure(const rclcpp_lifecycle::State& /*previous_state*/)
   {
-  
     franka_robot_state_ =
       std::make_unique<franka_semantic_components::FrankaRobotState>(
         franka_semantic_components::FrankaRobotState(arm_id_ + "/" + k_robot_state_interface_name));
