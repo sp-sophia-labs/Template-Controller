@@ -59,6 +59,9 @@ namespace fsm_ic
     controller_interface::InterfaceConfiguration state_interfaces_config;
     state_interfaces_config.type = controller_interface::interface_configuration_type::INDIVIDUAL;
 
+    // Creates state interface for the desired equilibrium position
+    state_interfaces_config.names = equilibrium_pose_d_->get_state_interface_names();
+
     for (const auto& franka_robot_model_name : franka_robot_model_->get_state_interface_names()) {
       state_interfaces_config.names.push_back(franka_robot_model_name);
     }
@@ -181,6 +184,11 @@ namespace fsm_ic
 
   CallbackReturn FSMImpedanceController::on_configure(const rclcpp_lifecycle::State& /*previous_state*/)
   {
+    
+    equilibrium_pose_d_ = 
+      std::make_unique<franka_semantic_components::FrankaCartesianPoseInterface>(
+        franka_semantic_components::FrankaCartesianPoseInterface(k_elbow_activated));
+
     franka_robot_state_ =
       std::make_unique<franka_semantic_components::FrankaRobotState>(
         franka_semantic_components::FrankaRobotState(arm_id_ + "/" + k_robot_state_interface_name));
@@ -240,6 +248,7 @@ namespace fsm_ic
   {
     franka_robot_state_->assign_loaned_state_interfaces(state_interfaces_);
     franka_robot_model_->assign_loaned_state_interfaces(state_interfaces_);
+    equilibrium_pose_d_->assign_loaned_state_interfaces(state_interfaces_);
     return CallbackReturn::SUCCESS;
   }
 
@@ -247,6 +256,7 @@ namespace fsm_ic
   {
     franka_robot_state_->release_interfaces();
     franka_robot_model_->release_interfaces();
+    equilibrium_pose_d_->release_interfaces();
     return CallbackReturn::SUCCESS;
   }
 

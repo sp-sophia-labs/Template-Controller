@@ -79,7 +79,10 @@ class FSMImpedanceController : public controller_interface::ControllerInterface
     private:
     std::unique_ptr<franka_semantic_components::FrankaRobotModel> franka_robot_model_;
     std::unique_ptr<franka_semantic_components::FrankaRobotState> franka_robot_state_;
-//     std::unique_ptr<franka_semantic_components::FrankaCartesianPoseInterface> franka_cartesian_pose_;
+
+    std::unique_ptr<franka_semantic_components::FrankaCartesianPoseInterface> equilibrium_pose_d_;
+    bool k_elbow_activated{true};
+    
 //     std::vector<hardware_interface::CommandInterface> joint_handles_;
     
 //     franka_msgs::msg::FrankaRobotState robot_state_, init_robot_state_;
