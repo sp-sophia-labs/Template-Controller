@@ -82,9 +82,7 @@ class FSMImpedanceController : public controller_interface::ControllerInterface
     std::unique_ptr<franka_semantic_components::FrankaRobotState> franka_robot_state_;
     std::unique_ptr<franka_semantic_components::FrankaCartesianPoseInterface> equilibrium_pose_d_;
     bool k_elbow_activated{true};
-    
-    std::vector<hardware_interface::CommandInterface> joint_handles_;
-    
+        
     franka_msgs::msg::FrankaRobotState robot_state_, init_robot_state_;
 
     const std::string k_robot_state_interface_name{"robot_state"};
@@ -101,8 +99,8 @@ class FSMImpedanceController : public controller_interface::ControllerInterface
     Eigen::Matrix<double, 6,6> Lambda = IDENTITY; // operational space mass matrix
     Eigen::Matrix<double, 6, 6> Sm = IDENTITY; //task space selection matrix for positions and rotation
     Eigen::Matrix<double, 6, 6> Sf = Eigen::MatrixXd::Zero(6,6); //task space selection matrix for forces
-    std::array<double, 16> F_T_EE; //end effector in flange frame
-    std::array<double, 16> EE_T_K; //stiffness frame in EE frame
+    geometry_msgs::msg::PoseStamped F_T_EE; //std::array<double, 16> F_T_EE; //end effector in flange frame
+    geometry_msgs::msg::PoseStamped EE_T_K; //stiffness frame in EE frame
     Eigen::Affine3d pose_desired;
     Eigen::Matrix<double, 6, 1> error; //pose error (6d)
     Eigen::Matrix<double, 6, 1>  F_contact_des = Eigen::MatrixXd::Zero(6,1); //desired contact force
