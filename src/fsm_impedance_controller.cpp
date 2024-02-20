@@ -1,4 +1,5 @@
 #include "fsm_impedance_controller/fsm_impedance_controller.hpp"
+#include <typeinfo>
 
 // ANSI escape codes for text color
 #define ANSI_COLOR_RESET   "\x1B[0m"
@@ -52,10 +53,9 @@ namespace fsm_ic
               position_and_orientation_d_target_mutex_);
       position_d_ = filter_params_ * position_d_target_ + (1.0 - filter_params_) * position_d_;
       orientation_d_ = orientation_d_.slerp(filter_params_, orientation_d_target_);
-
   }
 
-  // Main Functionalities
+
   CallbackReturn FSMImpedanceController::on_init()
   {
     std::vector<double> cartesian_stiffness_vector;
@@ -108,11 +108,60 @@ namespace fsm_ic
     return CallbackReturn::SUCCESS;
   }
 
+  // In ROS 2, the equivalent functionality to the starting() method in ROS 1 is typically handled in the on_activate() method. 
+  // The on_activate() method is called when a controller is activated, and this is a suitable place to perform actions 
+  // that need to occur just before the controller starts updating its state.
   CallbackReturn FSMImpedanceController::on_activate(const rclcpp_lifecycle::State& /*previous_state*/) 
   {
     franka_robot_state_->assign_loaned_state_interfaces(state_interfaces_);
     franka_robot_model_->assign_loaned_state_interfaces(state_interfaces_);
     equilibrium_pose_d_->assign_loaned_state_interfaces(state_interfaces_);
+
+    // Starting()
+    // compute initial velocity with jacobian and set x_attractor and q_d_nullspace
+    init_robot_state_ = franka_msgs::msg::FrankaRobotState();
+    franka_robot_state_->get_values_as_message(init_robot_state_);
+
+    std::array<double, 42> jacobian_array = franka_robot_model_->getZeroJacobian(franka::Frame::kEndEffector);
+
+    Eigen::Map<Eigen::Matrix<double, 7, 1>> q_initial(init_robot_state_.measured_joint_state.position.data());
+
+    Eigen::Vector3d position_init(
+    init_robot_state_.o_t_ee.pose.position.x,
+    init_robot_state_.o_t_ee.pose.position.y,
+    init_robot_state_.o_t_ee.pose.position.z);
+    Eigen::Quaterniond orientation_init(
+    init_robot_state_.o_t_ee.pose.orientation.w,
+    init_robot_state_.o_t_ee.pose.orientation.x,
+    init_robot_state_.o_t_ee.pose.orientation.y,
+    init_robot_state_.o_t_ee.pose.orientation.z);
+    Eigen::Affine3d initial_transform = Eigen::Affine3d::Identity();
+    initial_transform.translation() = position_init;
+    initial_transform.rotate(orientation_init.toRotationMatrix());
+
+    position_d_ = initial_transform.translation();
+    orientation_d_ = initial_transform.rotation();
+    position_d_target_ = initial_transform.translation();
+    orientation_d_target_ = initial_transform.rotation();
+
+    auto F_T_EE = init_robot_state_.f_t_ee;
+    auto EE_T_K = init_robot_state_.ee_t_k;
+    std::cout << "Type of init_robot_state_.f_t_ee: " << typeid(init_robot_state_.f_t_ee).name() << std::endl;
+
+    auto q_d_nullspace_ = q_initial;
+    nullspace_stiffness_target_ = 30;
+
+    K.topLeftCorner(3, 3) = 200 * Eigen::Matrix3d::Identity();
+    K.bottomRightCorner(3, 3) << 90, 0, 0, 0, 90, 0, 0, 0, 80;
+    D.topLeftCorner(3, 3) = 35 * Eigen::Matrix3d::Identity();
+    D.bottomRightCorner(3, 3) << 15, 0, 0, 0, 15, 0, 0, 0, 12;
+    cartesian_stiffness_target_ = K;
+    cartesian_damping_target_ = D;
+
+    R = 0.00001; C << 0.0, 0, 0.0;
+    repulsion_K.setZero(); repulsion_D.setZero();
+    repulsion_K = Eigen::Matrix3d::Identity(); repulsion_D = Eigen::Matrix3d::Identity();
+
     return CallbackReturn::SUCCESS;
   }
 
@@ -132,45 +181,6 @@ namespace fsm_ic
                   "---------------------------- on update() -----------------------------");
 
     // //  On_config():
-    // init_robot_state_ = franka_msgs::msg::FrankaRobotState();
-    // franka_robot_state_->get_values_as_message(init_robot_state_);
-
-    // Eigen::Map<Eigen::Matrix<double, 7, 1>> q_initial(init_robot_state_.measured_joint_state.position.data());
-
-    // Eigen::Vector3d position_init(
-    // init_robot_state_.o_t_ee.pose.position.x,
-    // init_robot_state_.o_t_ee.pose.position.y,
-    // init_robot_state_.o_t_ee.pose.position.z);
-    // Eigen::Quaterniond orientation_init(
-    // init_robot_state_.o_t_ee.pose.orientation.w,
-    // init_robot_state_.o_t_ee.pose.orientation.x,
-    // init_robot_state_.o_t_ee.pose.orientation.y,
-    // init_robot_state_.o_t_ee.pose.orientation.z);
-    // Eigen::Affine3d initial_transform = Eigen::Affine3d::Identity();
-    // initial_transform.translation() = position_init;
-    // initial_transform.rotate(orientation_init.toRotationMatrix());
-
-    // position_d_ = initial_transform.translation();
-    // orientation_d_ = initial_transform.rotation();
-    // position_d_target_ = initial_transform.translation();
-    // orientation_d_target_ = initial_transform.rotation();
-
-    // auto F_T_EE = init_robot_state_.f_t_ee;
-    // auto EE_T_K = init_robot_state_.ee_t_k;
-
-    // auto q_d_nullspace_ = q_initial;
-    // nullspace_stiffness_target_ = 30;
-
-    // K.topLeftCorner(3, 3) = 200 * Eigen::Matrix3d::Identity();
-    // K.bottomRightCorner(3, 3) << 90, 0, 0, 0, 90, 0, 0, 0, 80;
-    // D.topLeftCorner(3, 3) = 35 * Eigen::Matrix3d::Identity();
-    // D.bottomRightCorner(3, 3) << 15, 0, 0, 0, 15, 0, 0, 0, 12;
-    // cartesian_stiffness_target_ = K;
-    // cartesian_damping_target_ = D;
-
-    // R = 0.00001; C << 0.0, 0, 0.0;
-    // repulsion_K.setZero(); repulsion_D.setZero();
-    // repulsion_K = Eigen::Matrix3d::Identity(); repulsion_D = Eigen::Matrix3d::Identity();
 
     // //  Update():
     // robot_state_ = franka_msgs::msg::FrankaRobotState();
