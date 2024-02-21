@@ -4,6 +4,9 @@
 #include <chrono>
 #include <thread>
 
+#include <iostream>
+#include <boost/type_index.hpp>
+
 // ANSI escape codes for text color
 #define ANSI_COLOR_RESET   "\x1B[0m"
 #define ANSI_COLOR_GREEN   "\x1B[32m"
@@ -28,7 +31,8 @@ namespace fsm_ic
     Eigen::MatrixXd S_ = M_;  // copying the dimensions of M_, its content is not needed.
     S_.setZero();
     for (int i = 0; i < sing_vals_.size(); i++)
-        S_(i, i) = (sing_vals_(i)) / (sing_vals_(i) * sing_vals_(i) + lambda_ * lambda_);
+      S_(i, i) = (sing_vals_(i)) / (sing_vals_(i) * sing_vals_(i) + lambda_ * lambda_);
+
     M_pinv_ = Eigen::MatrixXd(svd.matrixV() * S_.transpose() * svd.matrixU().transpose());
   }
 
@@ -182,10 +186,6 @@ namespace fsm_ic
     RCLCPP_INFO_THROTTLE(get_node()->get_logger(), *get_node()->get_clock(), 1000,
                   "---------------------------- update() -----------------------------");
 
-    // update through a libfranka communication error. Is that code related ? 
-    bool unmute_update = true;
-
-    if(unmute_update){
     robot_state_ = franka_msgs::msg::FrankaRobotState();
     franka_robot_state_->get_values_as_message(robot_state_);
     
@@ -197,7 +197,7 @@ namespace fsm_ic
     Eigen::Map<Eigen::Matrix<double, 7, 1>> coriolis(coriolis_array.data());
     Eigen::Map<Eigen::Matrix<double, 6, 7>> jacobian(jacobian_array.data());
     
-    //  Robot state data
+    // Robot state data
     Eigen::Map<Eigen::Matrix<double, 7, 1>> q(robot_state_.measured_joint_state.position.data());
     Eigen::Map<Eigen::Matrix<double, 7, 1>> dq(robot_state_.measured_joint_state.velocity.data());
     Eigen::Map<Eigen::Matrix<double, 7, 1>> tau_J_d(robot_state_.measured_joint_state.effort.data());
@@ -226,18 +226,19 @@ namespace fsm_ic
     {
       orientation.coeffs() << -orientation.coeffs();
     }
+
     // "difference" quaternion
     Eigen::Quaterniond error_quaternion(orientation.inverse() * orientation_d_);
     error.tail(3) << error_quaternion.x(), error_quaternion.y(), error_quaternion.z();
     // Transform to base frame
-    error.tail(3) << -transform.rotation() * error.tail(3);
+    // error.tail(3) << -transform.rotation() * error.tail(3); // ERROR NOT USED
 
     // compute control
-    F_impedance = -Lambda * T.inverse() * (D * (jacobian * dq) + K * error);
+    auto F_impedance = -Lambda * T.inverse() * (D * (jacobian * dq) + K * error); 
 
     // Force PID
     // F_ext = Eigen::Map<Eigen::Matrix<double, 6, 1>>(robot_state_.o_f_ext_hat_k.data()) * 0.999 + 0.001 * F_ext; 
-    //o_f_ext_hat_k Change type
+    // o_f_ext_hat_k Change type :
     Eigen::Matrix<double, 6, 1> o_f_ext_hat_k_data;
     o_f_ext_hat_k_data << robot_state_.o_f_ext_hat_k.wrench.force.x, robot_state_.o_f_ext_hat_k.wrench.force.y,
     robot_state_.o_f_ext_hat_k.wrench.force.z, robot_state_.o_f_ext_hat_k.wrench.torque.x,
@@ -245,7 +246,7 @@ namespace fsm_ic
     F_ext = o_f_ext_hat_k_data* 0.999 + 0.001 * F_ext;
 
     I_F_error += dt*(F_contact_des - F_ext);
-    F_cmd = 0.2 * (F_contact_des - F_ext) + 0.1 * I_F_error + F_contact_des - 0 *Sf * F_impedance;
+    auto F_cmd = 0.2 * (F_contact_des - F_ext) + 0.1 * I_F_error + F_contact_des - 0 *Sf * F_impedance;
     
     // allocate variables
     Eigen::VectorXd tau_nullspace(7), tau_d(7), tau_impedance(7);
@@ -253,15 +254,15 @@ namespace fsm_ic
     // pseudoinverse for nullspace handling
     // kinematic pseuoinverse
     Eigen::MatrixXd jacobian_transpose_pinv;
-    pseudoInverse(jacobian.transpose(), jacobian_transpose_pinv);
+    // pseudoInverse(jacobian.transpose(), jacobian_transpose_pinv); //ERROR should be solved
 
-    //construct external repulsion force
+    // construct external repulsion force
     Eigen::Vector3d r = position - C; // compute vector between EE and sphere
     double penetration_depth = std::max(0.0, R-r.norm());
     Eigen::Vector3d v = (jacobian*dq).head(3);
     v = v.dot(r)/r.squaredNorm() * r; //projected velocity
     bool isInSphere = r.norm() < R;
-    // Eigen::Vector3d projected_error = error.head(3).dot(r)/r.squaredNorm() * r; Not used
+    // // Eigen::Vector3d projected_error = error.head(3).dot(r)/r.squaredNorm() * r; Not used
     double r_eq = 0.8 * R;
     repulsion_K = (K * r_eq/(R-r_eq)).topLeftCorner(3,3); //assume Lambda = Theta(T) to avoid numerical issues
     repulsion_D = 2 * (repulsion_K).array().sqrt();
@@ -274,33 +275,32 @@ namespace fsm_ic
       F_repulsion.head(3) = - exp(decay * (R-r.norm())) * 0.1 * repulsion_D * v + 0.9 * F_repulsion.head(3); // 0.005 * F_repulsion_new + 0.995 * F_repulsion_old
     }
     // nullspace PD control with damping ratio = 1
-    tau_nullspace << (Eigen::MatrixXd::Identity(7, 7) -
-                jacobian.transpose() * jacobian_transpose_pinv) *
-              (nullspace_stiffness_ * config_control * (q_d_nullspace_ - q) - //Do not use joint positions yet
-                (2.0 * sqrt(nullspace_stiffness_)) * dq);
+    // tau_nullspace << (Eigen::MatrixXd::Identity(7, 7) -
+    //           jacobian.transpose() * jacobian_transpose_pinv) *
+    //           (nullspace_stiffness_ * config_control * (q_d_nullspace_ - q) - //Do not use joint positions yet
+    //           (2.0 * sqrt(nullspace_stiffness_)) * dq);  //ERROR should be solved
 
-    //virtual walls
+    // virtual walls
     double wall_pos = 12.0;
-    if (std::abs(position.y()) >= wall_pos){
-      F_impedance.y() = -(500 * (position.y()-wall_pos)) + 45 *(jacobian*dq)(1,0) * 0.001 + 0.999 * F_impedance(1,0);
-    }
+    // if (std::abs(position.y()) >= wall_pos){
+    //   F_impedance.y() = -(500 * (position.y()-wall_pos)) + 45 *(jacobian*dq)(1,0) * 0.001 + 0.999 * F_impedance(1,0);
+    // } //ERROR should be solved
 
-    tau_impedance = jacobian.transpose() * Sm * (F_impedance + F_repulsion) + jacobian.transpose() * Sf * F_cmd;
-    tau_d << tau_impedance + tau_nullspace + coriolis; //add nullspace and coriolis components to desired torque
-    tau_d << saturateTorqueRate(tau_d, tau_J_d);  // Saturate torque rate to avoid discontinuities
+    // tau_impedance = jacobian.transpose() * Sm * (F_impedance + F_repulsion) + jacobian.transpose() * Sf * F_cmd;
+    // tau_d << tau_impedance + tau_nullspace + coriolis; //add nullspace and coriolis components to desired torque
+    // tau_d << saturateTorqueRate(tau_d, tau_J_d);  // Saturate torque rate to avoid discontinuities
     
+    tau_d << 0, 0, 0, 0, 0, 0, 0;
+
     for (int i = 0; i < num_joints; i++) {
-      //command_interfaces_ is already defined as std::vector<hardware_interface::LoanedCommandInterface> command_interfaces_
+      // command_interfaces_ is already defined as std::vector<hardware_interface::LoanedCommandInterface> command_interfaces_
       // in controller_interface_base
       command_interfaces_[i].set_value(tau_d[i]); 
+      // std::cout<<tau_d[i]<<std::endl;
     }
-
-    update_stiffness_and_references();
-
-    std::this_thread::sleep_for(std::chrono::milliseconds(20000));
-    }
+    // update_stiffness_and_references();
+    // std::this_thread::sleep_for(std::chrono::milliseconds(3000));
     
-
     return controller_interface::return_type::OK;
   }
 
