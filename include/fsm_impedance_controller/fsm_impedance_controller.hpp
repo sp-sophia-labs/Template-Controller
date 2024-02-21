@@ -133,6 +133,9 @@ class FSMImpedanceController : public controller_interface::ControllerInterface
     Eigen::Matrix<double, 3, 3> repulsion_K, repulsion_D;
     Eigen::Matrix<double, 6, 1> F_repulsion;
     Eigen::Matrix<double, 6, 1> F_impedance;
+
+    Eigen::Matrix<double, 6, 6> cartesian_stiffness_;
+    Eigen::Matrix<double, 6, 6> cartesian_damping_;
 };
 
 }
