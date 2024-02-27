@@ -33,7 +33,7 @@ namespace fsm_ic
     // it's possible that the Jacobian matrix is close to singular If you notice 
     // very small singular values, it might indicate a near-singular matrix, 
     // and the damping term in your pseudo-inverse function might need adjustment.
-    std::cout << "Singular values:\n" << svd.singularValues() << std::endl;
+    // std::cout << "Singular values:\n" << svd.singularValues() << std::endl;
     Eigen::JacobiSVD<Eigen::MatrixXd>::SingularValuesType sing_vals_ = svd.singularValues();
     Eigen::MatrixXd S_ = M_;  // copying the dimensions of M_, its content is not needed.
     S_.setZero();
@@ -246,48 +246,39 @@ namespace fsm_ic
     std::array<double, 42> jacobian_array = franka_robot_model_->getZeroJacobian(franka::Frame::kEndEffector);
 
     std::array<double, 42> endeffector_jacobian_wrt_base = franka_robot_model_->getZeroJacobian(franka::Frame::kEndEffector);
-    RCLCPP_INFO_STREAM_THROTTLE(get_node()->get_logger(), *get_node()->get_clock(), 1000,"end_effector_jacobian in base frame :" << endeffector_jacobian_wrt_base);
+    // RCLCPP_INFO_STREAM_THROTTLE(get_node()->get_logger(), *get_node()->get_clock(), 1000,"end_effector_jacobian in base frame :" << endeffector_jacobian_wrt_base);
 
     Eigen::Map<Eigen::Matrix<double, 6, 7>> jacobian(jacobian_array.data());
-    std::cout << "Jacobian:\n" << jacobian << std::endl;
+    // std::cout << "Jacobian:\n" << jacobian << std::endl;
 
+    // pseudoinverse for nullspace handling
     Eigen::MatrixXd jacobian_transpose_pinv;
 
+    // test : pseudoinverse function doesnt return error. Always in try {return correct pseudoinverse}
     try {
-      pseudoInverse(jacobian.transpose(), jacobian_transpose_pinv);
+      // pseudoInverse(jacobian.transpose(), jacobian_transpose_pinv);
+      jacobian_transpose_pinv = jacobian;
     } catch (const std::exception& e) {
       std::cerr << "Error during pseudo-inverse computation: " << e.what() << std::endl;
     }
     
-    // pseudoInverse(jacobian.transpose(), jacobian_transpose_pinv);
-
-    
-    // pseudoinverse for nullspace handling
-    
-    // pseudoInverse(jacobian.transpose(), jacobian_transpose_pinv); //run error
-    
     // Cartesian PD control with damping ratio = 1
-    // tau_task << jacobian.transpose() * (-cartesian_stiffness_ * error - cartesian_damping_ * (jacobian * dq));
-    //             tau_nullspace << (Eigen::MatrixXd::Identity(7, 7) -
-    //             jacobian.transpose()* jacobian_transpose_pinv) *
-    //             (nullspace_stiffness_ * (q_d_nullspace_ - q) -
-    //             (2.0 * sqrt(nullspace_stiffness_)) * dq);
+    tau_task << jacobian.transpose() * (-cartesian_stiffness_ * error - cartesian_damping_ * (jacobian * dq));
+    tau_nullspace << (Eigen::MatrixXd::Identity(7, 7) -
+                jacobian.transpose()* jacobian_transpose_pinv) *
+                (nullspace_stiffness_ * (q_d_nullspace_ - q) -
+                (2.0 * sqrt(nullspace_stiffness_)) * dq);
 
-    // tau_task << jacobian.transpose() * (-cartesian_stiffness_ * error - cartesian_damping_ * (jacobian * dq));
-    //             tau_nullspace << (Eigen::MatrixXd::Identity(7, 7)) *
-    //             (nullspace_stiffness_ * (q_d_nullspace_ - q) -
-    //             (2.0 * sqrt(nullspace_stiffness_)) * dq);
-
-    // tau_d << tau_task + tau_nullspace + coriolis;
+    tau_d << tau_task + tau_nullspace + coriolis;
     // saturate the commanded torque to joint limits
-    // tau_d << saturateTorqueRate(tau_d, tau_j_d);
+    tau_d << saturateTorqueRate(tau_d, tau_j_d);
 
-    // for (int i = 0; i < num_joints; i++) {
-    //   // command_interfaces_ is already defined as std::vector<hardware_interface::LoanedCommandInterface> command_interfaces_
-    //   // in controller_interface_base
-    //   command_interfaces_[i].set_value(tau_d[i]); 
-    //   std::cout<<tau_d[i]<<std::endl;
-    // }
+    for (int i = 0; i < num_joints; i++) {
+      // command_interfaces_ is already defined as std::vector<hardware_interface::LoanedCommandInterface> command_interfaces_
+      // in controller_interface_base
+      command_interfaces_[i].set_value(tau_d[i]/100); // be carefull ["power_limit_violation"]
+      std::cout<<tau_d[i]<<std::endl;
+    }
     
     return controller_interface::return_type::OK;
   }
