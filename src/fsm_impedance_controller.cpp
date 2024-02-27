@@ -194,19 +194,16 @@ namespace fsm_ic
 
   controller_interface::return_type FSMImpedanceController::update(const rclcpp::Time & time, const rclcpp::Duration & period)
   {
-    RCLCPP_INFO_THROTTLE(get_node()->get_logger(), *get_node()->get_clock(), 1000,
-                  "---------------------------- update() -----------------------------");
-
     robot_state_ = franka_msgs::msg::FrankaRobotState();
     franka_robot_state_->get_values_as_message(robot_state_);
     
-    // 1.Robot model data
+    // ---------------------------------------------------------------- 1.Robot model & state data ----------------------------------------------------------------
     std::array<double, 49> mass = franka_robot_model_->getMassMatrix();
     std::array<double, 7> coriolis_array = franka_robot_model_->getCoriolisForceVector();
+    std::array<double, 42> jacobian_array = franka_robot_model_->getZeroJacobian(franka::Frame::kEndEffector);
     Eigen::Map<Eigen::Matrix<double, 7, 7>> M(mass.data());
     Eigen::Map<Eigen::Matrix<double, 7, 1>> coriolis(coriolis_array.data());
-    
-    // 2.Robot state data
+    Eigen::Map<Eigen::Matrix<double, 6, 7>> jacobian(jacobian_array.data());
     Eigen::Map<Eigen::Matrix<double, 7, 1>> q(robot_state_.measured_joint_state.position.data());
     Eigen::Map<Eigen::Matrix<double, 7, 1>> dq(robot_state_.measured_joint_state.velocity.data());
     Eigen::Map<Eigen::Matrix<double, 7, 1>> tau_j_d(robot_state_.measured_joint_state.effort.data());
@@ -223,54 +220,81 @@ namespace fsm_ic
     transform.translation() = position;
     transform.rotate(orientation.toRotationMatrix());
 
-    // 3.Compute error to desired pose
+
+
+    
+    // ---------------------------------------------------------------- 2.Compute error to desired pose ----------------------------------------------------------------
     Eigen::Matrix<double, 6, 1> error;
-    // position error
     error.head(3) << position - position_d_;
-    // orientation error
     if(orientation_d_.coeffs().dot(orientation.coeffs()) < 0.0)
     {
       orientation.coeffs() << -orientation.coeffs();
     }
-    // "difference" quaternion
     Eigen::Quaterniond error_quaternion(orientation.inverse() * orientation_d_);
     error.tail(3) << error_quaternion.x(), error_quaternion.y(), error_quaternion.z();
-    // Transform to base frame
     error.tail(3) << -transform.rotation() * error.tail(3); 
 
 
-    // 4.Compute control law
-    Eigen::VectorXd tau_task(7), tau_nullspace(7), tau_d(7);
 
-    // FIX PSEUDOINVERSE
-    std::array<double, 42> jacobian_array = franka_robot_model_->getZeroJacobian(franka::Frame::kEndEffector);
 
-    std::array<double, 42> endeffector_jacobian_wrt_base = franka_robot_model_->getZeroJacobian(franka::Frame::kEndEffector);
-    // RCLCPP_INFO_STREAM_THROTTLE(get_node()->get_logger(), *get_node()->get_clock(), 1000,"end_effector_jacobian in base frame :" << endeffector_jacobian_wrt_base);
+    // ---------------------------------------------------------------- 3.Compute control law ----------------------------------------------------------------
+    auto F_impedance = -Lambda * T.inverse() * (D * (jacobian * dq) + K * error); 
+    Eigen::Matrix<double, 6, 1> o_f_ext_hat_k_data;
+    o_f_ext_hat_k_data << robot_state_.o_f_ext_hat_k.wrench.force.x, robot_state_.o_f_ext_hat_k.wrench.force.y,
+    robot_state_.o_f_ext_hat_k.wrench.force.z, robot_state_.o_f_ext_hat_k.wrench.torque.x,
+    robot_state_.o_f_ext_hat_k.wrench.torque.y, robot_state_.o_f_ext_hat_k.wrench.torque.z;    
+    F_ext = o_f_ext_hat_k_data* 0.999 + 0.001 * F_ext;
 
-    Eigen::Map<Eigen::Matrix<double, 6, 7>> jacobian(jacobian_array.data());
-    // std::cout << "Jacobian:\n" << jacobian << std::endl;
-
-    // pseudoinverse for nullspace handling
+    I_F_error += dt*(F_contact_des - F_ext);
+    auto F_cmd = 0.2 * (F_contact_des - F_ext) + 0.1 * I_F_error + F_contact_des - 0 *Sf * F_impedance;
+   
     Eigen::MatrixXd jacobian_transpose_pinv;
-
-    // test : pseudoinverse function doesnt return error. Always in try {return correct pseudoinverse}
     try {
       // pseudoInverse(jacobian.transpose(), jacobian_transpose_pinv);
       jacobian_transpose_pinv = jacobian;
     } catch (const std::exception& e) {
       std::cerr << "Error during pseudo-inverse computation: " << e.what() << std::endl;
     }
+
+    Eigen::Vector3d r = position - C; 
+    double penetration_depth = std::max(0.0, R-r.norm());
+    Eigen::Vector3d v = (jacobian*dq).head(3);
+    v = v.dot(r)/r.squaredNorm() * r; 
+    bool isInSphere = r.norm() < R;
+    Eigen::Vector3d projected_error = error.head(3).dot(r)/r.squaredNorm() * r;
+    double r_eq = 0.8 * R;
+    repulsion_K = (K * r_eq/(R-r_eq)).topLeftCorner(3,3); 
+    repulsion_D = 2 * (repulsion_K).array().sqrt();
+    if(isInSphere){
+        F_repulsion.head(3) = 0.99* (repulsion_K * penetration_depth * r/r.norm() - repulsion_D * v) + 0.01 * F_repulsion.head(3); //assume Theta = Lambda
+    }
+    else{
+        double decay = -log(0.0001)/R; 
+        F_repulsion.head(3) = - exp(decay * (R-r.norm())) * 0.1 * repulsion_D * v + 0.9 * F_repulsion.head(3); // 0.005 * F_repulsion_new + 0.995 * F_repulsion_old
+    }
+
+    //virtual walls
+    double wall_pos = 12.0;
+    // if (std::abs(position.y()) >= wall_pos){
+    //     F_impedance.y() = -(500 * (position.y()-wall_pos)) + 45 *(jacobian*dq)(1,0) * 0.001 + 0.999 * F_impedance(1,0);
+    // }
+
+
     
-    // Cartesian PD control with damping ratio = 1
+    
+    // ---------------------------------------------------------------- 4.Send torque ----------------------------------------------------------------
+    Eigen::VectorXd tau_task(7), tau_nullspace(7), tau_d(7), tau_impedance(7);
+    
     tau_task << jacobian.transpose() * (-cartesian_stiffness_ * error - cartesian_damping_ * (jacobian * dq));
+    // tau_impedance << jacobian.transpose() * Sm * (F_impedance + F_repulsion) + jacobian.transpose() * Sf * F_cmd;
     tau_nullspace << (Eigen::MatrixXd::Identity(7, 7) -
                 jacobian.transpose()* jacobian_transpose_pinv) *
                 (nullspace_stiffness_ * (q_d_nullspace_ - q) -
                 (2.0 * sqrt(nullspace_stiffness_)) * dq);
 
     tau_d << tau_task + tau_nullspace + coriolis;
-    // saturate the commanded torque to joint limits
+    // tau_d << tau_impedance + tau_nullspace + coriolis;
+
     tau_d << saturateTorqueRate(tau_d, tau_j_d);
 
     for (int i = 0; i < num_joints; i++) {
@@ -279,6 +303,8 @@ namespace fsm_ic
       command_interfaces_[i].set_value(tau_d[i]/100); // be carefull ["power_limit_violation"]
       std::cout<<tau_d[i]<<std::endl;
     }
+
+    // update_stiffness_and_references();
     
     return controller_interface::return_type::OK;
   }
