@@ -280,6 +280,14 @@ namespace fsm_ic
       std::cout<<tau_d[i]<<std::endl;
     }
     
+    // update parameters changed online either through dynamic reconfigure or through the interactive
+    // target by filtering
+    cartesian_stiffness_ = filter_params_ * cartesian_stiffness_target_ + (1.0 - filter_params_) * cartesian_stiffness_;
+    cartesian_damping_ = filter_params_ * cartesian_damping_target_ + (1.0 - filter_params_) * cartesian_damping_;
+    nullspace_stiffness_ = filter_params_ * nullspace_stiffness_target_ + (1.0 - filter_params_) * nullspace_stiffness_;
+    std::lock_guard<std::mutex> position_d_target_mutex_lock(position_and_orientation_d_target_mutex_);
+    position_d_ = filter_params_ * position_d_target_ + (1.0 - filter_params_) * position_d_;
+    orientation_d_ = orientation_d_.slerp(filter_params_, orientation_d_target_);
     return controller_interface::return_type::OK;
   }
 
