@@ -26,14 +26,7 @@ namespace fsm_ic
 
   inline void pseudoInverse(const Eigen::MatrixXd& M_, Eigen::MatrixXd& M_pinv_, bool damped = true) {
     double lambda_ = damped ? 0.2 : 0.0;
-
-    // If the singular values are very small, increasing the damping factor might help stabilize the computation.
-
     Eigen::JacobiSVD<Eigen::MatrixXd> svd(M_, Eigen::ComputeFullU | Eigen::ComputeFullV);
-    // it's possible that the Jacobian matrix is close to singular If you notice 
-    // very small singular values, it might indicate a near-singular matrix, 
-    // and the damping term in your pseudo-inverse function might need adjustment.
-    // std::cout << "Singular values:\n" << svd.singularValues() << std::endl;
     Eigen::JacobiSVD<Eigen::MatrixXd>::SingularValuesType sing_vals_ = svd.singularValues();
     Eigen::MatrixXd S_ = M_;  // copying the dimensions of M_, its content is not needed.
     S_.setZero();
@@ -194,19 +187,18 @@ namespace fsm_ic
 
   controller_interface::return_type FSMImpedanceController::update(const rclcpp::Time & time, const rclcpp::Duration & period)
   {
-    RCLCPP_INFO_THROTTLE(get_node()->get_logger(), *get_node()->get_clock(), 1000,
-                  "---------------------------- update() -----------------------------");
-
     robot_state_ = franka_msgs::msg::FrankaRobotState();
     franka_robot_state_->get_values_as_message(robot_state_);
     
-    // 1.Robot model data
+    // 1.Robot model & state data
     std::array<double, 49> mass = franka_robot_model_->getMassMatrix();
     std::array<double, 7> coriolis_array = franka_robot_model_->getCoriolisForceVector();
+    std::array<double, 42> jacobian_array = franka_robot_model_->getZeroJacobian(franka::Frame::kEndEffector);
+
     Eigen::Map<Eigen::Matrix<double, 7, 7>> M(mass.data());
     Eigen::Map<Eigen::Matrix<double, 7, 1>> coriolis(coriolis_array.data());
-    
-    // 2.Robot state data
+    Eigen::Map<Eigen::Matrix<double, 6, 7>> jacobian(jacobian_array.data());
+
     Eigen::Map<Eigen::Matrix<double, 7, 1>> q(robot_state_.measured_joint_state.position.data());
     Eigen::Map<Eigen::Matrix<double, 7, 1>> dq(robot_state_.measured_joint_state.velocity.data());
     Eigen::Map<Eigen::Matrix<double, 7, 1>> tau_j_d(robot_state_.measured_joint_state.effort.data());
@@ -223,7 +215,7 @@ namespace fsm_ic
     transform.translation() = position;
     transform.rotate(orientation.toRotationMatrix());
 
-    // 3.Compute error to desired pose
+    // 2.Compute error to desired pose
     Eigen::Matrix<double, 6, 1> error;
     // position error
     error.head(3) << position - position_d_;
@@ -238,23 +230,12 @@ namespace fsm_ic
     // Transform to base frame
     error.tail(3) << -transform.rotation() * error.tail(3); 
 
-
-    // 4.Compute control law
+    // 3.Compute control law
     Eigen::VectorXd tau_task(7), tau_nullspace(7), tau_d(7);
-
-    // FIX PSEUDOINVERSE
-    std::array<double, 42> jacobian_array = franka_robot_model_->getZeroJacobian(franka::Frame::kEndEffector);
-
-    std::array<double, 42> endeffector_jacobian_wrt_base = franka_robot_model_->getZeroJacobian(franka::Frame::kEndEffector);
-    // RCLCPP_INFO_STREAM_THROTTLE(get_node()->get_logger(), *get_node()->get_clock(), 1000,"end_effector_jacobian in base frame :" << endeffector_jacobian_wrt_base);
-
-    Eigen::Map<Eigen::Matrix<double, 6, 7>> jacobian(jacobian_array.data());
-    // std::cout << "Jacobian:\n" << jacobian << std::endl;
 
     // pseudoinverse for nullspace handling
     Eigen::MatrixXd jacobian_transpose_pinv;
 
-    // test : pseudoinverse function doesnt return error. Always in try {return correct pseudoinverse}
     try {
       // pseudoInverse(jacobian.transpose(), jacobian_transpose_pinv);
       jacobian_transpose_pinv = jacobian;
@@ -264,11 +245,7 @@ namespace fsm_ic
     
     // Cartesian PD control with damping ratio = 1
     tau_task << jacobian.transpose() * (-cartesian_stiffness_ * error - cartesian_damping_ * (jacobian * dq));
-    tau_nullspace << (Eigen::MatrixXd::Identity(7, 7) -
-                jacobian.transpose()* jacobian_transpose_pinv) *
-                (nullspace_stiffness_ * (q_d_nullspace_ - q) -
-                (2.0 * sqrt(nullspace_stiffness_)) * dq);
-
+    tau_nullspace << (Eigen::MatrixXd::Identity(7, 7) - jacobian.transpose()* jacobian_transpose_pinv) * (nullspace_stiffness_ * (q_d_nullspace_ - q) - (2.0 * sqrt(nullspace_stiffness_)) * dq);
     tau_d << tau_task + tau_nullspace + coriolis;
     // saturate the commanded torque to joint limits
     tau_d << saturateTorqueRate(tau_d, tau_j_d);
@@ -290,8 +267,6 @@ namespace fsm_ic
     orientation_d_ = orientation_d_.slerp(filter_params_, orientation_d_target_);
     return controller_interface::return_type::OK;
   }
-
-
 }
 
 // Expose the controller as visible to the rest of ros2_control
