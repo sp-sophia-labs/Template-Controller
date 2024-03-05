@@ -75,6 +75,9 @@ class FSMImpedanceController : public controller_interface::ControllerInterface
 
     // Custom methods    
     void update_stiffness_and_references();
+    
+    rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr sub_equilibrium_pose;
+    void equilibriumPoseCallback(const geometry_msgs::msg::PoseStamped::SharedPtr msg);
 
 
     private:
@@ -101,6 +104,40 @@ class FSMImpedanceController : public controller_interface::ControllerInterface
     double nullspace_stiffness_{20.0};
     double nullspace_stiffness_target_{20.0};
     const double delta_tau_max_{1.0};
+    
+    /*Stiffness Matrix (K): Describes how stiff the end-effector behaves in response to
+    external forces. A higher stiffness results in less compliance to external forces.
+    Damping Matrix (D): Represents how the system resists changes in velocity.
+    It helps dampen oscillations.*/
+    /*
+    Depending on the parameters of the impedance matrix, you can control the stiffness
+    (resistance to deformation) and damping (rate of motion reduction) of the end-effector. 
+    */
+    /*
+    The controller should maintain the equilibrium pose when no external forces are applied.
+    This is the natural resting position of the robot's end-effector.
+    */
+    /*
+    The equilibrium pose in Cartesian Impedance Control is the position and orientation
+    where the controlled system (robotic manipulator) would naturally come to rest when
+    no external forces or torques are applied. This can be thought of as the "relaxed" or
+    "neutral" pose of the end-effector.
+    */
+    /*The equilibrium pose refers to a specific configuration or 
+    position of the robot where the applied forces or torques, 
+    as well as the robot's response, balance out, resulting in a stable state.
+    In the context of Cartesian Impedance Control, 
+    achieving an equilibrium pose means that the end-effector 
+    is positioned and oriented in a way that the controlled forces 
+    and compliance are balanced, resulting in a stable and controlled
+    interaction with the environment.
+    In simpler terms, the equilibrium pose is a state where the robot, 
+    under the influence of the Cartesian Impedance Controller, 
+    is in a balanced configuration concerning external forces. 
+    This balance ensures that the robot can perform tasks with
+    controlled interaction forces, making it suitable for applications
+    such as contact tasks, object manipulation, or tasks requiring force-sensitive interactions.*/
+    
     Eigen::Matrix<double, 6, 6> cartesian_stiffness_;
     Eigen::Matrix<double, 6, 6> cartesian_stiffness_target_;
     Eigen::Matrix<double, 6, 6> cartesian_damping_;

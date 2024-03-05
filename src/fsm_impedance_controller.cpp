@@ -25,6 +25,17 @@ namespace fsm_ic
     }
   }  // anonymous namespace
 
+  void FSMImpedanceController::equilibriumPoseCallback(const geometry_msgs::msg::PoseStamped::SharedPtr msg) 
+  {
+      std::lock_guard<std::mutex> position_d_target_mutex_lock(position_and_orientation_d_target_mutex_);
+      position_d_target_ << msg->pose.position.x, msg->pose.position.y, msg->pose.position.z;
+      Eigen::Quaterniond last_orientation_d_target(orientation_d_target_);
+      orientation_d_target_.coeffs() << msg->pose.orientation.x, msg->pose.orientation.y, msg->pose.orientation.z, msg->pose.orientation.w;
+      if (last_orientation_d_target.coeffs().dot(orientation_d_target_.coeffs()) < 0.0) {
+          orientation_d_target_.coeffs() << -orientation_d_target_.coeffs();
+      }
+  }
+
 
   Eigen::Matrix<double, 7, 1> FSMImpedanceController::saturateTorqueRate(
       const Eigen::Matrix<double, 7, 1>& tau_d_calculated,
@@ -51,6 +62,11 @@ namespace fsm_ic
 
     cartesian_stiffness_.setZero();
     cartesian_damping_.setZero();
+
+    // Equilibrium pose subscription
+    sub_equilibrium_pose = get_node()->create_subscription<geometry_msgs::msg::PoseStamped>(
+      "equilibrium_pose", 10, 
+      std::bind(&FSMImpedanceController::equilibriumPoseCallback, this, std::placeholders::_1));
 
     return CallbackReturn::SUCCESS;
   }
@@ -223,7 +239,7 @@ namespace fsm_ic
     for (int i = 0; i < num_joints; i++) {
       // command_interfaces_ is already defined as std::vector<hardware_interface::LoanedCommandInterface> command_interfaces_
       // in controller_interface_base
-      command_interfaces_[i].set_value(tau_d[i]/100); // be carefull ["power_limit_violation"]
+      // command_interfaces_[i].set_value(tau_d[i]/100); // be carefull ["power_limit_violation"]
       std::cout<<tau_d[i]<<std::endl;
     }
     
