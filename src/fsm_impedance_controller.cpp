@@ -1,4 +1,6 @@
 #include "fsm_impedance_controller/fsm_impedance_controller.hpp"
+#include "fsm_impedance_controller/pseudo_inverse.hpp"
+
 
 #include <typeinfo>
 #include <chrono>
@@ -24,18 +26,6 @@ namespace fsm_ic
     }
   }  // anonymous namespace
 
-  inline void pseudoInverse(const Eigen::MatrixXd& M_, Eigen::MatrixXd& M_pinv_, bool damped = true) {
-    double lambda_ = damped ? 0.2 : 0.0;
-    Eigen::JacobiSVD<Eigen::MatrixXd> svd(M_, Eigen::ComputeFullU | Eigen::ComputeFullV);
-    Eigen::JacobiSVD<Eigen::MatrixXd>::SingularValuesType sing_vals_ = svd.singularValues();
-    Eigen::MatrixXd S_ = M_;  // copying the dimensions of M_, its content is not needed.
-    S_.setZero();
-
-    for (int i = 0; i < sing_vals_.size(); i++)
-      S_(i, i) = (sing_vals_(i)) / (sing_vals_(i) * sing_vals_(i) + lambda_ * lambda_);
-
-    M_pinv_ = Eigen::MatrixXd(svd.matrixV() * S_.transpose() * svd.matrixU().transpose());
-  }
 
   Eigen::Matrix<double, 7, 1> FSMImpedanceController::saturateTorqueRate(const Eigen::Matrix<double, 7, 1>& tau_d_calculated, const Eigen::Matrix<double, 7, 1>& tau_J_d) 
   {  
@@ -62,7 +52,6 @@ namespace fsm_ic
       position_d_ = filter_params_ * position_d_target_ + (1.0 - filter_params_) * position_d_;
       orientation_d_ = orientation_d_.slerp(filter_params_, orientation_d_target_);
   }
-
 
   CallbackReturn FSMImpedanceController::on_init()
   {
@@ -187,6 +176,8 @@ namespace fsm_ic
 
   controller_interface::return_type FSMImpedanceController::update(const rclcpp::Time & time, const rclcpp::Duration & period)
   {
+    std::cout<<"update() iteration"<<std::endl;
+
     robot_state_ = franka_msgs::msg::FrankaRobotState();
     franka_robot_state_->get_values_as_message(robot_state_);
     
@@ -237,8 +228,10 @@ namespace fsm_ic
     Eigen::MatrixXd jacobian_transpose_pinv;
 
     try {
-      // pseudoInverse(jacobian.transpose(), jacobian_transpose_pinv);
-      jacobian_transpose_pinv = jacobian;
+      // jacobian_transpose_pinv = jacobian;
+      // you should build using : colcon build --cmake-args -DCMAKE_BUILD_TYPE=Release
+      pseudoInverse(jacobian.transpose(), jacobian_transpose_pinv);
+
     } catch (const std::exception& e) {
       std::cerr << "Error during pseudo-inverse computation: " << e.what() << std::endl;
     }
@@ -253,8 +246,8 @@ namespace fsm_ic
     for (int i = 0; i < num_joints; i++) {
       // command_interfaces_ is already defined as std::vector<hardware_interface::LoanedCommandInterface> command_interfaces_
       // in controller_interface_base
-      command_interfaces_[i].set_value(tau_d[i]/100); // be carefull ["power_limit_violation"]
-      std::cout<<tau_d[i]<<std::endl;
+      // command_interfaces_[i].set_value(tau_d[i]); // be carefull ["power_limit_violation"]
+      // std::cout<<tau_d[i]<<std::endl;
     }
     
     // update parameters changed online either through dynamic reconfigure or through the interactive
