@@ -1,7 +1,6 @@
 #include "fsm_impedance_controller/fsm_impedance_controller.hpp"
 #include "fsm_impedance_controller/pseudo_inverse.hpp"
 
-
 #include <typeinfo>
 #include <chrono>
 #include <thread>
@@ -27,36 +26,24 @@ namespace fsm_ic
   }  // anonymous namespace
 
 
-  Eigen::Matrix<double, 7, 1> FSMImpedanceController::saturateTorqueRate(const Eigen::Matrix<double, 7, 1>& tau_d_calculated, const Eigen::Matrix<double, 7, 1>& tau_J_d) 
-  {  
+  Eigen::Matrix<double, 7, 1> FSMImpedanceController::saturateTorqueRate(
+      const Eigen::Matrix<double, 7, 1>& tau_d_calculated,
+      const Eigen::Matrix<double, 7, 1>& tau_J_d) {  // NOLINT (readability-identifier-naming)
     Eigen::Matrix<double, 7, 1> tau_d_saturated{};
     for (size_t i = 0; i < 7; i++) {
       double difference = tau_d_calculated[i] - tau_J_d[i];
       tau_d_saturated[i] =
-        tau_J_d[i] + std::max(std::min(difference, delta_tau_max_), -delta_tau_max_);
+          tau_J_d[i] + std::max(std::min(difference, delta_tau_max_), -delta_tau_max_);
     }
     return tau_d_saturated;
   }
 
-  void FSMImpedanceController::update_stiffness_and_references()
-  {
-      // update parameters changed online either through dynamic reconfigure or through the interactive
-      // target by filtering
-      /** at the moment we do not use dynamic reconfigure and control the robot via D, K and T **/
-      K = filter_params_ * cartesian_stiffness_target_ + (1.0 - filter_params_) * K;
-      D = filter_params_ * cartesian_damping_target_ + (1.0 - filter_params_) * D;
-      nullspace_stiffness_ =
-              filter_params_ * nullspace_stiffness_target_ + (1.0 - filter_params_) * nullspace_stiffness_;
-      std::lock_guard<std::mutex> position_d_target_mutex_lock(
-              position_and_orientation_d_target_mutex_);
-      position_d_ = filter_params_ * position_d_target_ + (1.0 - filter_params_) * position_d_;
-      orientation_d_ = orientation_d_.slerp(filter_params_, orientation_d_target_);
-  }
 
   CallbackReturn FSMImpedanceController::on_init()
   {
     std::vector<double> cartesian_stiffness_vector;
     std::vector<double> cartesian_damping_vector;
+
     position_d_.setZero();
     orientation_d_.coeffs() << 0.0, 0.0, 0.0, 1.0;
     position_d_target_.setZero();
@@ -64,6 +51,7 @@ namespace fsm_ic
 
     cartesian_stiffness_.setZero();
     cartesian_damping_.setZero();
+
     return CallbackReturn::SUCCESS;
   }
 
@@ -122,7 +110,7 @@ namespace fsm_ic
     init_robot_state_ = franka_msgs::msg::FrankaRobotState();
     franka_robot_state_->get_values_as_message(init_robot_state_);
 
-    // std::array<double, 42> jacobian_array = franka_robot_model_->getZeroJacobian(franka::Frame::kEndEffector); Not used
+    std::array<double, 42> jacobian_array = franka_robot_model_->getZeroJacobian(franka::Frame::kEndEffector); //Not used
 
     Eigen::Map<Eigen::Matrix<double, 7, 1>> q_initial(init_robot_state_.measured_joint_state.position.data());
 
@@ -144,23 +132,7 @@ namespace fsm_ic
     position_d_target_ = initial_transform.translation();
     orientation_d_target_ = initial_transform.rotation();
 
-    F_T_EE = init_robot_state_.f_t_ee;
-    EE_T_K = init_robot_state_.ee_t_k;
-
     q_d_nullspace_ = q_initial;
-    nullspace_stiffness_target_ = 30;
-
-    K.topLeftCorner(3, 3) = 200 * Eigen::Matrix3d::Identity();
-    K.bottomRightCorner(3, 3) << 90, 0, 0, 0, 90, 0, 0, 0, 80;
-    D.topLeftCorner(3, 3) = 35 * Eigen::Matrix3d::Identity();
-    D.bottomRightCorner(3, 3) << 15, 0, 0, 0, 15, 0, 0, 0, 12;
-    cartesian_stiffness_target_ = K;
-    cartesian_damping_target_ = D;
-
-    R = 0.00001; C << 0.0, 0, 0.0;
-    repulsion_K.setZero(); repulsion_D.setZero();
-    repulsion_K = Eigen::Matrix3d::Identity(); repulsion_D = Eigen::Matrix3d::Identity();
-
     return CallbackReturn::SUCCESS;
   }
 
@@ -176,7 +148,7 @@ namespace fsm_ic
 
   controller_interface::return_type FSMImpedanceController::update(const rclcpp::Time & time, const rclcpp::Duration & period)
   {
-    std::cout<<"update() iteration"<<std::endl;
+    std::cout<<"update iteration"<<std::endl;
 
     robot_state_ = franka_msgs::msg::FrankaRobotState();
     franka_robot_state_->get_values_as_message(robot_state_);
@@ -238,16 +210,21 @@ namespace fsm_ic
     
     // Cartesian PD control with damping ratio = 1
     tau_task << jacobian.transpose() * (-cartesian_stiffness_ * error - cartesian_damping_ * (jacobian * dq));
-    tau_nullspace << (Eigen::MatrixXd::Identity(7, 7) - jacobian.transpose()* jacobian_transpose_pinv) * (nullspace_stiffness_ * (q_d_nullspace_ - q) - (2.0 * sqrt(nullspace_stiffness_)) * dq);
+    tau_nullspace << (Eigen::MatrixXd::Identity(7, 7) - 
+                      jacobian.transpose()* jacobian_transpose_pinv) * 
+                      (nullspace_stiffness_ * (q_d_nullspace_ - q) -
+                      (2.0 * sqrt(nullspace_stiffness_)) * dq);
+
+    // Desired torque                 
     tau_d << tau_task + tau_nullspace + coriolis;
-    // saturate the commanded torque to joint limits
+    // Saturate torque rate to avoid discontinuities
     tau_d << saturateTorqueRate(tau_d, tau_j_d);
 
     for (int i = 0; i < num_joints; i++) {
       // command_interfaces_ is already defined as std::vector<hardware_interface::LoanedCommandInterface> command_interfaces_
       // in controller_interface_base
-      // command_interfaces_[i].set_value(tau_d[i]); // be carefull ["power_limit_violation"]
-      // std::cout<<tau_d[i]<<std::endl;
+      command_interfaces_[i].set_value(tau_d[i]/100); // be carefull ["power_limit_violation"]
+      std::cout<<tau_d[i]<<std::endl;
     }
     
     // update parameters changed online either through dynamic reconfigure or through the interactive
