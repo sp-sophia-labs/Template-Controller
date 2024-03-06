@@ -1,18 +1,9 @@
-// Author: Enrico Corvaglia
-// https://github.com/CentroEPiaggio/kuka-lwr/blob/master/lwr_controllers/include/utils/pseudo_inversion.h
-// File provided under public domain
 // pseudo_inverse() computes the pseudo inverse of matrix M_ using SVD decomposition (can choose
 // between damped and not)
 // returns the pseudo inverted matrix M_pinv_
 
 #pragma once
-
 #include "fsm_impedance_controller/visibility_control.h"
-
-// #include <Eigen/Core>
-// #include <Eigen/LU>
-// #include <Eigen/SVD>
-
 #include <eigen3/Eigen/Dense>
 
 namespace fsm_ic {

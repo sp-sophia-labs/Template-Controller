@@ -34,6 +34,7 @@ namespace fsm_ic
       if (last_orientation_d_target.coeffs().dot(orientation_d_target_.coeffs()) < 0.0) {
           orientation_d_target_.coeffs() << -orientation_d_target_.coeffs();
       }
+      RCLCPP_INFO(get_node()->get_logger(), "equilibriumPoseCallback");
   }
 
 
@@ -52,6 +53,7 @@ namespace fsm_ic
 
   CallbackReturn FSMImpedanceController::on_init()
   {
+    RCLCPP_INFO(get_node()->get_logger(), "on init");
     std::vector<double> cartesian_stiffness_vector;
     std::vector<double> cartesian_damping_vector;
 
@@ -164,7 +166,7 @@ namespace fsm_ic
 
   controller_interface::return_type FSMImpedanceController::update(const rclcpp::Time & time, const rclcpp::Duration & period)
   {
-    std::cout<<"update iteration"<<std::endl;
+    // std::cout<<"update iteration"<<std::endl;
 
     robot_state_ = franka_msgs::msg::FrankaRobotState();
     franka_robot_state_->get_values_as_message(robot_state_);
@@ -239,7 +241,7 @@ namespace fsm_ic
     for (int i = 0; i < num_joints; i++) {
       // command_interfaces_ is already defined as std::vector<hardware_interface::LoanedCommandInterface> command_interfaces_
       // in controller_interface_base
-      // command_interfaces_[i].set_value(tau_d[i]/100); // be carefull ["power_limit_violation"]
+      command_interfaces_[i].set_value(tau_d[i]/10); // be carefull ["power_limit_violation"]
       std::cout<<tau_d[i]<<std::endl;
     }
     

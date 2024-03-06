@@ -40,6 +40,14 @@ foreach(PACKAGE_DEPENDENCY IN ITEMS ${PACKAGE_DEPENDENCIES})
   find_package(${PACKAGE_DEPENDENCY} REQUIRED)
 endforeach()
 
+add_executable(equilibrium_pose_publisher src/equilibrium_pose_publisher.cpp)
+
+# Link the executable with the necessary libraries
+ament_target_dependencies(equilibrium_pose_publisher
+  rclcpp
+  geometry_msgs
+)
+
 # Describe the compilation of the controller
 add_library(
   ${PROJECT_NAME} SHARED
@@ -62,6 +70,10 @@ ament_target_dependencies(
 pluginlib_export_plugin_description_file(controller_interface fsm_impedance_controller.xml)
 
 # Describe installation procedures
+install(TARGETS
+  equilibrium_pose_publisher
+  DESTINATION lib/${PROJECT_NAME}
+)
 install(
   DIRECTORY include/ 
   DESTINATION include/${PROJECT_NAME}
