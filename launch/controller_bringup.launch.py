@@ -59,4 +59,9 @@ def generate_launch_description():
             arguments=['force_impedance_controller'],
             output='screen',
         ),
+        Node(
+            package='fsm_impedance_controller',
+            executable='equilibrium_pose_publisher',
+            output='screen',
+        ),
     ])

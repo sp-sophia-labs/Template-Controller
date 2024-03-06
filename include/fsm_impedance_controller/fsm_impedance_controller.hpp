@@ -75,15 +75,14 @@ class FSMImpedanceController : public controller_interface::ControllerInterface
 
     // Custom methods    
     void update_stiffness_and_references();
-    
-    rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr sub_equilibrium_pose;
-    void equilibriumPoseCallback(const geometry_msgs::msg::PoseStamped::SharedPtr msg);
 
 
     private:
     std::unique_ptr<franka_semantic_components::FrankaRobotModel> franka_robot_model_;
     std::unique_ptr<franka_semantic_components::FrankaRobotState> franka_robot_state_;
-    std::unique_ptr<franka_semantic_components::FrankaCartesianPoseInterface> equilibrium_pose_d_;
+    
+    //std::unique_ptr<franka_semantic_components::FrankaCartesianPoseInterface> equilibrium_pose_d_;
+    
     bool k_elbow_activated{true};
         
     franka_msgs::msg::FrankaRobotState robot_state_, init_robot_state_;
@@ -148,6 +147,10 @@ class FSMImpedanceController : public controller_interface::ControllerInterface
     std::mutex position_and_orientation_d_target_mutex_;
     Eigen::Vector3d position_d_target_;
     Eigen::Quaterniond orientation_d_target_;   
+
+    rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr sub_equilibrium_pose_;
+    void equilibriumPoseCallback(const geometry_msgs::msg::PoseStamped::SharedPtr msg);
 };
 
 }
+          
