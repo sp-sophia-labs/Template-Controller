@@ -8,19 +8,15 @@
 #include <iostream>
 #include <boost/type_index.hpp>
 
-// ANSI escape codes for text color
-#define ANSI_COLOR_RESET   "\x1B[0m"
-#define ANSI_COLOR_GREEN   "\x1B[32m"
-
 namespace fsm_ic
 {
 
   CallbackReturn FSMImpedanceController::on_init()
   {
     // Equilibrium pose subscription
-    // sub_equilibrium_pose_ = get_node()->create_subscription<geometry_msgs::msg::PoseStamped>(
-    //   "equilibrium_pose", 20, 
-    //   std::bind(&FSMImpedanceController::equilibriumPoseCallback, this, std::placeholders::_1));
+    sub_equilibrium_pose_ = get_node()->create_subscription<geometry_msgs::msg::PoseStamped>(
+      "equilibrium_pose", 20, 
+      std::bind(&FSMImpedanceController::equilibriumPoseCallback, this, std::placeholders::_1));
 
     position_d_.setZero();
     orientation_d_.coeffs() << 0.0, 0.0, 0.0, 1.0;
@@ -59,9 +55,6 @@ namespace fsm_ic
     // Define state interfaces
     controller_interface::InterfaceConfiguration state_interfaces_config;
     state_interfaces_config.type = controller_interface::interface_configuration_type::INDIVIDUAL;
-    
-    // Creates state interface for the desired equilibrium position
-    // state_interfaces_config.names = equilibrium_pose_d_->get_state_interface_names();
 
     // Creates state interface for robot state 
     for (const auto& franka_robot_model_name : franka_robot_model_->get_state_interface_names()) {
@@ -76,7 +69,6 @@ namespace fsm_ic
 
   CallbackReturn FSMImpedanceController::on_configure(const rclcpp_lifecycle::State& /*previous_state*/)
   {
-    // equilibrium_pose_d_ = std::make_unique<franka_semantic_components::FrankaCartesianPoseInterface>(franka_semantic_components::FrankaCartesianPoseInterface(k_elbow_activated));
     franka_robot_state_ = std::make_unique<franka_semantic_components::FrankaRobotState>(franka_semantic_components::FrankaRobotState(arm_id_ + "/" + k_robot_state_interface_name));
     franka_robot_model_ = std::make_unique<franka_semantic_components::FrankaRobotModel>(franka_semantic_components::FrankaRobotModel(arm_id_ + "/" + k_robot_model_interface_name, arm_id_ + "/" + k_robot_state_interface_name));
     return CallbackReturn::SUCCESS;
@@ -89,14 +81,11 @@ namespace fsm_ic
   {
     franka_robot_state_->assign_loaned_state_interfaces(state_interfaces_);
     franka_robot_model_->assign_loaned_state_interfaces(state_interfaces_);
-    // equilibrium_pose_d_->assign_loaned_state_interfaces(state_interfaces_);
 
     // Starting()
     // compute initial velocity with jacobian and set x_attractor and q_d_nullspace
     init_robot_state_ = franka_msgs::msg::FrankaRobotState();
     franka_robot_state_->get_values_as_message(init_robot_state_);
-
-    // std::array<double, 42> jacobian_array = franka_robot_model_->getZeroJacobian(franka::Frame::kEndEffector); //Not used
 
     Eigen::Map<Eigen::Matrix<double, 7, 1>> q_initial(init_robot_state_.measured_joint_state.position.data());
 
@@ -125,8 +114,6 @@ namespace fsm_ic
   {
     franka_robot_state_->release_interfaces();
     franka_robot_model_->release_interfaces();
-    // equilibrium_pose_d_->release_interfaces();
-    RCLCPP_INFO(get_node()->get_logger(), ANSI_COLOR_GREEN"deactivated successfully");
     return CallbackReturn::SUCCESS;
   }
 
@@ -164,7 +151,7 @@ namespace fsm_ic
     // compute error to desired pose
     // position error
     Eigen::Matrix<double, 6, 1> error;
-    error.head(3) << position - position_d_; //position_d_ = initial state pose then updated 
+    error.head(3) << position - position_d_; 
     
     // orientation error
     if(orientation_d_.coeffs().dot(orientation.coeffs()) < 0.0)
@@ -205,29 +192,24 @@ namespace fsm_ic
 
     // Desired torque                 
     tau_d << tau_task + coriolis;
-    // Saturate torque rate to avoid discontinuities
-    // tau_d << saturateTorqueRate(tau_d, tau_J_d);
 
     for (int i = 0; i < num_joints; i++) {
-      // command_interfaces_ is already defined as std::vector<hardware_interface::LoanedCommandInterface> command_interfaces_
-      // in controller_interface_base
-      command_interfaces_[i].set_value(tau_d[i]); // be carefull ["power_limit_violation"]
+      command_interfaces_[i].set_value(tau_d[i]); 
       std::cout<<tau_d[i]<<std::endl;
     }
     
-    // update parameters changed online either through dynamic reconfigure or through the interactive
-    // target by filtering
-    // cartesian_stiffness_ = 
-    // filter_params_ * cartesian_stiffness_target_ + (1.0 - filter_params_) * cartesian_stiffness_;
-    // cartesian_damping_ = 
-    // filter_params_ * cartesian_damping_target_ + (1.0 - filter_params_) * cartesian_damping_;
-    // nullspace_stiffness_ = 
-    // filter_params_ * nullspace_stiffness_target_ + (1.0 - filter_params_) * nullspace_stiffness_;
+    // update parameters changed online either through dynamic reconfigure or through the interactive target by filtering
+    cartesian_stiffness_ = 
+    filter_params_ * cartesian_stiffness_target_ + (1.0 - filter_params_) * cartesian_stiffness_;
+    cartesian_damping_ = 
+    filter_params_ * cartesian_damping_target_ + (1.0 - filter_params_) * cartesian_damping_;
+    nullspace_stiffness_ = 
+    filter_params_ * nullspace_stiffness_target_ + (1.0 - filter_params_) * nullspace_stiffness_;
     
-    // std::lock_guard<std::mutex> position_d_target_mutex_lock(
-    //   position_and_orientation_d_target_mutex_);
-    // position_d_ = filter_params_ * position_d_target_ + (1.0 - filter_params_) * position_d_;
-    // orientation_d_ = orientation_d_.slerp(filter_params_, orientation_d_target_);
+    std::lock_guard<std::mutex> position_d_target_mutex_lock(
+      position_and_orientation_d_target_mutex_);
+    position_d_ = filter_params_ * position_d_target_ + (1.0 - filter_params_) * position_d_;
+    orientation_d_ = orientation_d_.slerp(filter_params_, orientation_d_target_);
     
     return controller_interface::return_type::OK;
   }
@@ -241,7 +223,6 @@ namespace fsm_ic
       if (last_orientation_d_target.coeffs().dot(orientation_d_target_.coeffs()) < 0.0) {
           orientation_d_target_.coeffs() << -orientation_d_target_.coeffs();
       }
-      RCLCPP_INFO(get_node()->get_logger(), "equilibriumPoseCallback");
   }
 
   Eigen::Matrix<double, 7, 1> FSMImpedanceController::saturateTorqueRate(

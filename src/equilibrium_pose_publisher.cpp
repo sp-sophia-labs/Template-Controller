@@ -22,10 +22,10 @@ namespace fsm_ic
 
         // Set the values of the PoseStamped message (modify this as needed)
         msg->header.stamp = now();
-        msg->header.frame_id = "fr3_link0";  // Set the appropriate frame_id
-        msg->pose.position.x = 2.0;
-        msg->pose.position.y = 2.0;
-        msg->pose.position.z = 2.0;
+        msg->header.frame_id = "fr3_link7";  // Set the appropriate frame_id
+        msg->pose.position.x = 1.0;
+        msg->pose.position.y = 1.0;
+        msg->pose.position.z = 1.0;
         msg->pose.orientation.x = 0.0;
         msg->pose.orientation.y = 0.0;
         msg->pose.orientation.z = 0.0;
