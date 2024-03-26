@@ -28,10 +28,10 @@ namespace fsm_ic
 
     // Compliance parameters
     nullspace_stiffness_target_ = 30;
-    K.topLeftCorner(3, 3) = 200 * Eigen::Matrix3d::Identity();
-    K.bottomRightCorner(3, 3) << 90, 0, 0, 0, 90, 0, 0, 0, 80;
-    D.topLeftCorner(3, 3) = 35 * Eigen::Matrix3d::Identity();
-    D.bottomRightCorner(3, 3) << 15, 0, 0, 0, 15, 0, 0, 0, 12;
+    K.topLeftCorner(3, 3) = 2 * Eigen::Matrix3d::Identity();
+    K.bottomRightCorner(3, 3) << 9, 0, 0, 0, 9, 0, 0, 0, 8;
+    D.topLeftCorner(3, 3) = 3 * Eigen::Matrix3d::Identity();
+    D.bottomRightCorner(3, 3) << 1, 0, 0, 0, 1, 0, 0, 0, 1;
     cartesian_stiffness_target_ = K;
     cartesian_damping_target_ = D;
 
@@ -293,7 +293,7 @@ namespace fsm_ic
     position_d_ = filter_params_ * position_d_target_ + (1.0 - filter_params_) * position_d_;
     orientation_d_ = orientation_d_.slerp(filter_params_, orientation_d_target_);
   }
-  
+
 }
 
 // Expose the controller as visible to the rest of ros2_control
