@@ -244,13 +244,13 @@ namespace fsm_ic
         F_impedance.y() = -(500 * (position.y()-wall_pos)) + 45 *(jacobian*dq)(1,0) * 0.001 + 0.999 * F_impedance(1,0);
     }
 
-    tau_impedance = jacobian.transpose() * Sm * (F_impedance + F_repulsion) + jacobian.transpose() * Sf * F_cmd;
-    tau_d << tau_impedance + tau_nullspace + coriolis; //add nullspace and coriolis components to desired torque
-    tau_d << saturateTorqueRate(tau_d, tau_J_d);  // Saturate torque rate to avoid discontinuities
+    tau_impedance = jacobian.transpose() * Sm * (F_repulsion) + jacobian.transpose() * Sf * F_cmd;
+    tau_d <<  tau_impedance + tau_nullspace + coriolis; //add nullspace and coriolis components to desired torque
+    // tau_d << saturateTorqueRate(tau_d, tau_J_d);  // Saturate torque rate to avoid discontinuities
 
     for (int i = 0; i < num_joints; i++) {
       command_interfaces_[i].set_value(tau_d[i]); 
-      std::cout<<tau_d[i]<<std::endl;
+      std::cout<< "tau_d " << i+1 << " : " <<tau_d[i]<<std::endl;
     }
     
     update_stiffness_and_references();
